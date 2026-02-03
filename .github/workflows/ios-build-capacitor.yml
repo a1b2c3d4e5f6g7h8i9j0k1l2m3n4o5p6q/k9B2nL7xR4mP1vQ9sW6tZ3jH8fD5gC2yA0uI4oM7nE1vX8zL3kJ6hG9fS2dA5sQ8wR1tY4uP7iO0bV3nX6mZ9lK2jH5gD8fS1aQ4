@@ -50,15 +50,6 @@ on:
           - macos_only
         default: 'all_devices'
       
-      target_type:
-        description: 'Build target type'
-        required: true
-        type: choice
-        options:
-          - simulator
-          - real
-        default: 'simulator'
-      
       # Build Options
       build_mode:
         description: 'What to do?'
@@ -715,89 +706,66 @@ jobs:
       - name: Configure Target Platform
         working-directory: app/ios/App
         run: |
-          # Set target devices and build type based on selection
+          # Set target devices based on selection
+          # build_only = simulator (no code signing)
+          # publish_to_appstore = production signing (handled by Fastlane)
           IS_CATALYST="false"
-          TARGET_TYPE="${{ inputs.target_type }}"  # simulator or real
           
-          # Determine destination based on target_platform AND target_type
+          # Determine destination based on target_platform
+          # For build_only, always use simulator destinations
+          # For publish_to_appstore, Fastlane handles the destination
           case "${{ inputs.target_platform }}" in
             "iphone_only")
-              if [ "$TARGET_TYPE" == "simulator" ]; then
-                DESTINATION="generic/platform=iOS Simulator"
-              else
-                DESTINATION="generic/platform=iOS"
-              fi
+              DESTINATION="generic/platform=iOS Simulator"
               DEVICES="1"  # iPhone only
               ;;
             "ipad_only")
-              if [ "$TARGET_TYPE" == "simulator" ]; then
-                DESTINATION="generic/platform=iOS Simulator"
-              else
-                DESTINATION="generic/platform=iOS"
-              fi
+              DESTINATION="generic/platform=iOS Simulator"
               DEVICES="2"  # iPad only
               ;;
             "iphone_and_ipad")
-              if [ "$TARGET_TYPE" == "simulator" ]; then
-                DESTINATION="generic/platform=iOS Simulator"
-              else
-                DESTINATION="generic/platform=iOS"
-              fi
+              DESTINATION="generic/platform=iOS Simulator"
               DEVICES="1,2"  # iPhone + iPad
               ;;
             "macos_only")
-              if [ "$TARGET_TYPE" == "simulator" ]; then
-                DESTINATION="generic/platform=macOS,variant=Mac Catalyst"
-              else
-                DESTINATION="generic/platform=macOS,variant=Mac Catalyst"
-              fi
+              DESTINATION="generic/platform=macOS,variant=Mac Catalyst"
               DEVICES="1,2"
               IS_CATALYST="true"
               ;;
             *)  # all_devices (default) - iPhone + iPad + Mac Catalyst
-              if [ "$TARGET_TYPE" == "simulator" ]; then
-                DESTINATION="generic/platform=macOS,variant=Mac Catalyst"
-              else
-                DESTINATION="generic/platform=macOS,variant=Mac Catalyst"
-              fi
+              DESTINATION="generic/platform=macOS,variant=Mac Catalyst"
               DEVICES="1,2"  # Universal + Mac
               IS_CATALYST="true"
               ;;
           esac
           
-          # Determine export format based on build mode
+          # Determine export format and code signing based on build mode
           if [ "${{ inputs.build_mode }}" == "build_only" ]; then
             EXPORT_FORMAT="app"
-          else
-            EXPORT_FORMAT="ipa"
-          fi
-          
-          # Code signing settings based on target_type
-          if [ "$TARGET_TYPE" == "simulator" ]; then
             CODE_SIGN_IDENTITY="-"
             CODE_SIGNING_REQUIRED="NO"
             CODE_SIGNING_ALLOWED="NO"
             echo "📱 Building for SIMULATOR (no code signing)"
           else
+            EXPORT_FORMAT="ipa"
             CODE_SIGN_IDENTITY="Apple Distribution"
             CODE_SIGNING_REQUIRED="YES"
             CODE_SIGNING_ALLOWED="YES"
-            echo "📱 Building for REAL DEVICE (code signing enabled)"
+            echo "📱 Building for APP STORE (production signing)"
           fi
           
-          # Store Team ID for code signing (needed for real device builds)
+          # Store Team ID for code signing
           TEAM_ID="${{ steps.apple.outputs.team_id }}"
           
           echo "DESTINATION=$DESTINATION" >> $GITHUB_ENV
           echo "TARGET_DEVICES=$DEVICES" >> $GITHUB_ENV
           echo "IS_CATALYST=$IS_CATALYST" >> $GITHUB_ENV
           echo "EXPORT_FORMAT=$EXPORT_FORMAT" >> $GITHUB_ENV
-          echo "TARGET_TYPE=$TARGET_TYPE" >> $GITHUB_ENV
           echo "CODE_SIGN_IDENTITY=$CODE_SIGN_IDENTITY" >> $GITHUB_ENV
           echo "CODE_SIGNING_REQUIRED=$CODE_SIGNING_REQUIRED" >> $GITHUB_ENV
           echo "CODE_SIGNING_ALLOWED=$CODE_SIGNING_ALLOWED" >> $GITHUB_ENV
           echo "TEAM_ID=$TEAM_ID" >> $GITHUB_ENV
-          echo "Building for: ${{ inputs.target_platform }} ($TARGET_TYPE) - format: $EXPORT_FORMAT"
+          echo "Building for: ${{ inputs.target_platform }} - format: $EXPORT_FORMAT"
           
           # Store app name for file naming (no spaces for filenames)
           APP_NAME_SAFE=$(echo "${{ steps.capacitor.outputs.app_name }}" | tr ' ' '-')
@@ -851,75 +819,38 @@ jobs:
           if [ "${{ inputs.build_mode }}" == "build_only" ]; then
             # Build .app for testing
             
-            if [ "${{ inputs.target_platform }}" == "all_devices" ]; then
-              # ALL DEVICES: Build BOTH iOS and macOS apps
-              if [ "$TARGET_TYPE" == "simulator" ]; then
-                # Simulator builds (no code signing)
-                echo "🔨 Building iOS Simulator app..."
-                xcodebuild $XC_ARG \
-                  -scheme App \
-                  -configuration Release \
-                  -destination "generic/platform=iOS Simulator" \
-                  -derivedDataPath build-simulator \
-                  CODE_SIGN_IDENTITY="-" \
-                  CODE_SIGNING_REQUIRED=NO \
-                  CODE_SIGNING_ALLOWED=NO
-                
-                APP_PATH=$(find build-simulator -name "*.app" -type d | head -1)
-                cp -R "$APP_PATH" "./${APP_NAME_SAFE}-iOS-Simulator.app"
-                zip -r "${APP_NAME_SAFE}-iOS-Simulator.app.zip" "${APP_NAME_SAFE}-iOS-Simulator.app"
-                
-                echo "🔨 Building macOS (Mac Catalyst) app..."
-                xcodebuild $XC_ARG \
-                  -scheme App \
-                  -configuration Release \
-                  -destination "generic/platform=macOS,variant=Mac Catalyst" \
-                  -derivedDataPath build-macos \
-                  SUPPORTS_MACCATALYST=YES \
-                  CODE_SIGN_IDENTITY="-" \
-                  CODE_SIGNING_REQUIRED=NO \
-                  CODE_SIGNING_ALLOWED=NO
-                
-                APP_PATH=$(find build-macos -name "*.app" -type d | head -1)
-                cp -R "$APP_PATH" "./${APP_NAME_SAFE}-macOS.app"
-                zip -r "${APP_NAME_SAFE}-macOS.app.zip" "${APP_NAME_SAFE}-macOS.app"
-                
-                echo "✅ Built both iOS Simulator and macOS (VM) apps"
-              else
-                # Real device builds (with code signing)
-                echo "🔨 Building iOS app for REAL devices..."
-                xcodebuild $XC_ARG \
-                  -scheme App \
-                  -configuration Release \
-                  -destination "generic/platform=iOS" \
-                  -derivedDataPath build-ios \
-                  DEVELOPMENT_TEAM="$TEAM_ID" \
-                  CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
-                  CODE_SIGNING_REQUIRED="$CODE_SIGNING_REQUIRED" \
-                  CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED"
-                
-                APP_PATH=$(find build-ios -name "*.app" -type d | head -1)
-                cp -R "$APP_PATH" "./${APP_NAME_SAFE}-iOS.app"
-                zip -r "${APP_NAME_SAFE}-iOS.app.zip" "${APP_NAME_SAFE}-iOS.app"
-                
-                echo "🔨 Building macOS (Mac Catalyst) app for REAL Macs..."
-                xcodebuild $XC_ARG \
-                  -scheme App \
-                  -configuration Release \
-                  -destination "generic/platform=macOS,variant=Mac Catalyst" \
-                  -derivedDataPath build-macos \
-                  SUPPORTS_MACCATALYST=YES \
-                  DEVELOPMENT_TEAM="$TEAM_ID" \
-                  CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
-                  CODE_SIGNING_REQUIRED="$CODE_SIGNING_REQUIRED" \
-                  CODE_SIGNING_ALLOWED="$CODE_SIGNING_ALLOWED"
-                
-                APP_PATH=$(find build-macos -name "*.app" -type d | head -1)
-                cp -R "$APP_PATH" "./${APP_NAME_SAFE}-macOS.app"
-                zip -r "${APP_NAME_SAFE}-macOS.app.zip" "${APP_NAME_SAFE}-macOS.app"
-                
-                echo "✅ Built both iOS and macOS apps for REAL devices"
-              fi
+          if [ "${{ inputs.target_platform }}" == "all_devices" ]; then
+              # ALL DEVICES: Build BOTH iOS Simulator and macOS apps (no code signing)
+              echo "🔨 Building iOS Simulator app..."
+              xcodebuild $XC_ARG \
+                -scheme App \
+                -configuration Release \
+                -destination "generic/platform=iOS Simulator" \
+                -derivedDataPath build-simulator \
+                CODE_SIGN_IDENTITY="-" \
+                CODE_SIGNING_REQUIRED=NO \
+                CODE_SIGNING_ALLOWED=NO
+              
+              APP_PATH=$(find build-simulator -name "*.app" -type d | head -1)
+              cp -R "$APP_PATH" "./${APP_NAME_SAFE}-iOS-Simulator.app"
+              zip -r "${APP_NAME_SAFE}-iOS-Simulator.app.zip" "${APP_NAME_SAFE}-iOS-Simulator.app"
+              
+              echo "🔨 Building macOS (Mac Catalyst) app..."
+              xcodebuild $XC_ARG \
+                -scheme App \
+                -configuration Release \
+                -destination "generic/platform=macOS,variant=Mac Catalyst" \
+                -derivedDataPath build-macos \
+                SUPPORTS_MACCATALYST=YES \
+                CODE_SIGN_IDENTITY="-" \
+                CODE_SIGNING_REQUIRED=NO \
+                CODE_SIGNING_ALLOWED=NO
+              
+              APP_PATH=$(find build-macos -name "*.app" -type d | head -1)
+              cp -R "$APP_PATH" "./${APP_NAME_SAFE}-macOS.app"
+              zip -r "${APP_NAME_SAFE}-macOS.app.zip" "${APP_NAME_SAFE}-macOS.app"
+              
+              echo "✅ Built both iOS Simulator and macOS apps"
               
             elif [ "$IS_CATALYST" == "true" ]; then
               # macos_only: Mac Catalyst build only
@@ -1125,34 +1056,17 @@ jobs:
             fi
           fi
       
-      # Upload artifacts for all_devices SIMULATOR builds
+      # Upload artifacts for all_devices builds
       - name: Upload iOS Simulator Artifact
-        if: inputs.build_mode == 'build_only' && inputs.target_platform == 'all_devices' && inputs.target_type == 'simulator'
+        if: inputs.build_mode == 'build_only' && inputs.target_platform == 'all_devices'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.capacitor.outputs.app_name }}-iOS-Simulator-${{ inputs.version }}
           path: app/ios/App/${{ env.APP_NAME_SAFE }}-iOS-Simulator.app.zip
           retention-days: 30
       
-      - name: Upload macOS VM Artifact
-        if: inputs.build_mode == 'build_only' && inputs.target_platform == 'all_devices' && inputs.target_type == 'simulator'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.capacitor.outputs.app_name }}-macOS-VM-${{ inputs.version }}
-          path: app/ios/App/${{ env.APP_NAME_SAFE }}-macOS.app.zip
-          retention-days: 30
-      
-      # Upload artifacts for all_devices REAL builds
-      - name: Upload iOS Real Device Artifact
-        if: inputs.build_mode == 'build_only' && inputs.target_platform == 'all_devices' && inputs.target_type == 'real'
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.capacitor.outputs.app_name }}-iOS-${{ inputs.version }}
-          path: app/ios/App/${{ env.APP_NAME_SAFE }}-iOS.app.zip
-          retention-days: 30
-      
-      - name: Upload macOS Real Artifact
-        if: inputs.build_mode == 'build_only' && inputs.target_platform == 'all_devices' && inputs.target_type == 'real'
+      - name: Upload macOS Artifact
+        if: inputs.build_mode == 'build_only' && inputs.target_platform == 'all_devices'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.capacitor.outputs.app_name }}-macOS-${{ inputs.version }}
@@ -1164,7 +1078,7 @@ jobs:
         if: inputs.build_mode == 'build_only' && inputs.target_platform != 'all_devices'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.capacitor.outputs.app_name }}-${{ inputs.target_platform }}-${{ inputs.target_type }}-${{ inputs.version }}
+          name: ${{ steps.capacitor.outputs.app_name }}-${{ inputs.target_platform }}-Simulator-${{ inputs.version }}
           path: app/ios/App/${{ env.APP_NAME_SAFE }}.app.zip
           retention-days: 30
       
@@ -1175,24 +1089,15 @@ jobs:
           echo "**Version:** ${{ inputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "**Bundle ID:** ${{ steps.capacitor.outputs.bundle_id }}" >> $GITHUB_STEP_SUMMARY
           echo "**Platform:** ${{ inputs.target_platform }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Target Type:** ${{ inputs.target_type }}" >> $GITHUB_STEP_SUMMARY
           if [ "${{ inputs.build_mode }}" == "build_only" ]; then
             if [ "${{ inputs.target_platform }}" == "all_devices" ]; then
               echo "📦 **Two artifacts available:**" >> $GITHUB_STEP_SUMMARY
-              if [ "${{ inputs.target_type }}" == "simulator" ]; then
-                echo "- 📱 iOS Simulator .app (drag into iOS Simulator)" >> $GITHUB_STEP_SUMMARY
-                echo "- 🖥️ macOS .app (for macOS VM - double-click to run)" >> $GITHUB_STEP_SUMMARY
-              else
-                echo "- � iOS .app (for real iPhone/iPad)" >> $GITHUB_STEP_SUMMARY
-                echo "- 🖥️ macOS .app (for real Mac - double-click to run)" >> $GITHUB_STEP_SUMMARY
-              fi
+              echo "- 📱 iOS Simulator .app (drag into iOS Simulator)" >> $GITHUB_STEP_SUMMARY
+              echo "- 🖥️ macOS .app (double-click to run)" >> $GITHUB_STEP_SUMMARY
             else
-              if [ "${{ inputs.target_type }}" == "simulator" ]; then
-                echo "�📦 Download .app from Artifacts (for Simulator/VM)" >> $GITHUB_STEP_SUMMARY
-              else
-                echo "📦 Download .app from Artifacts (for real device)" >> $GITHUB_STEP_SUMMARY
-              fi
+              echo "📦 Download .app from Artifacts (for Simulator)" >> $GITHUB_STEP_SUMMARY
             fi
           else
-            echo "🚀 Uploaded to App Store Connect" >> $GITHUB_STEP_SUMMARY
+            echo "� Uploaded to App Store Connect" >> $GITHUB_STEP_SUMMARY
+            echo "� Test via **TestFlight** on your real device" >> $GITHUB_STEP_SUMMARY
           fi
