@@ -658,9 +658,9 @@ jobs:
           echo "✅ Localized app names applied successfully"
       
       - name: Configure Mac Catalyst Entitlements
-            if: inputs.target_platform == 'all_devices' || inputs.target_platform == 'macos_only'
-            working-directory: app/ios/App
-            run: |
+        if: inputs.target_platform == 'all_devices' || inputs.target_platform == 'macos_only'
+        working-directory: app/ios/App
+        run: |
               echo "🔧 Configuring Mac Catalyst App Sandbox..."
               
               # 1. Create App.entitlements if it doesn't exist
