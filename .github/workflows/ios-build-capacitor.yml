@@ -573,89 +573,23 @@ jobs:
           
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ inputs.version }}" App/Info.plist
       
-      - name: Apply Localized App Names
+      - name: Set App Display Name
         working-directory: app
         run: |
-          echo "📛 Applying localized app names from fastlane/metadata..."
+          echo "📛 Setting app display name from Capacitor config..."
           
-          # Check if fastlane metadata exists
-          if [ ! -d "fastlane/metadata" ]; then
-            echo "⚠️ No fastlane/metadata folder found, using Capacitor appName as fallback"
-            APP_NAME="${{ steps.capacitor.outputs.app_name }}"
-            /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" ios/App/App/Info.plist 2>/dev/null || \
-              /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string $APP_NAME" ios/App/App/Info.plist
-            /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" ios/App/App/Info.plist 2>/dev/null || \
-              /usr/libexec/PlistBuddy -c "Add :CFBundleName string $APP_NAME" ios/App/App/Info.plist
-            exit 0
-          fi
+          APP_NAME="${{ steps.capacitor.outputs.app_name }}"
+          echo "  App Name: $APP_NAME"
           
-          # Function to map locale codes to iOS locale folders (Bash 3 compatible)
-          map_locale() {
-            case "$1" in
-              "en-US") echo "en" ;;
-              "pt-BR") echo "pt-BR" ;;
-              "es-ES") echo "es" ;;
-              "fr-FR") echo "fr" ;;
-              "de-DE") echo "de" ;;
-              *) echo "$1" ;;  # Use as-is if no mapping
-            esac
-          }
+          # Set CFBundleDisplayName (shown on Home Screen and Mac Dock)
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" ios/App/App/Info.plist 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string $APP_NAME" ios/App/App/Info.plist
           
-          # Process each locale folder in fastlane/metadata
-          for LOCALE_DIR in fastlane/metadata/*/; do
-            LOCALE=$(basename "$LOCALE_DIR")
-            NAME_FILE="${LOCALE_DIR}name.txt"
-            
-            if [ -f "$NAME_FILE" ]; then
-              APP_NAME=$(cat "$NAME_FILE" | tr -d '\n')
-              
-              # Get iOS locale folder name using function
-              IOS_LOCALE=$(map_locale "$LOCALE")
-              LPROJ_DIR="ios/App/App/${IOS_LOCALE}.lproj"
-              
-              echo "  📍 $LOCALE -> $IOS_LOCALE: \"$APP_NAME\""
-              
-              # Create .lproj folder if it doesn't exist
-              mkdir -p "$LPROJ_DIR"
-              
-              # Create/update InfoPlist.strings with CFBundleDisplayName and CFBundleName
-              echo "\"CFBundleDisplayName\" = \"$APP_NAME\";" > "$LPROJ_DIR/InfoPlist.strings"
-              echo "\"CFBundleName\" = \"$APP_NAME\";" >> "$LPROJ_DIR/InfoPlist.strings"
-              
-              echo "    ✅ Created $LPROJ_DIR/InfoPlist.strings"
-            fi
-          done
-          # Detect primary locale dynamically:
-          # 1. Check for fastlane/metadata/primary_locale.txt
-          # 2. Check for fastlane/metadata/default/name.txt
-          # 3. Use first available locale folder with name.txt
-          # 4. Fall back to Capacitor appName
-          if [ -f "fastlane/metadata/primary_locale.txt" ]; then
-            PRIMARY_LOCALE=$(cat "fastlane/metadata/primary_locale.txt" | tr -d '\n')
-            echo "  📍 Primary locale from config: $PRIMARY_LOCALE"
-          elif [ -f "fastlane/metadata/default/name.txt" ]; then
-            PRIMARY_LOCALE="default"
-            echo "  📍 Using default locale folder"
-          else
-            # Use first available locale folder
-            PRIMARY_LOCALE=$(ls -1 fastlane/metadata/ | head -1)
-            echo "  📍 Primary locale (first folder): $PRIMARY_LOCALE"
-          fi
+          # Set CFBundleName (shown in Mac menus: About/Hide/Quit)
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" ios/App/App/Info.plist 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleName string $APP_NAME" ios/App/App/Info.plist
           
-          if [ -f "fastlane/metadata/${PRIMARY_LOCALE}/name.txt" ]; then
-            BASE_NAME=$(cat "fastlane/metadata/${PRIMARY_LOCALE}/name.txt" | tr -d '\n')
-          else
-            BASE_NAME="${{ steps.capacitor.outputs.app_name }}"
-          fi
-          
-          echo "  📛 Base app name: $BASE_NAME"
-          
-          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $BASE_NAME" ios/App/App/Info.plist 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string $BASE_NAME" ios/App/App/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleName $BASE_NAME" ios/App/App/Info.plist 2>/dev/null || \
-            /usr/libexec/PlistBuddy -c "Add :CFBundleName string $BASE_NAME" ios/App/App/Info.plist
-          
-          echo "✅ Localized app names applied successfully"
+          echo "✅ App display name set to: $APP_NAME"
       
       - name: Configure Mac Catalyst Entitlements
         if: inputs.target_platform == 'all_devices' || inputs.target_platform == 'macos_only'
