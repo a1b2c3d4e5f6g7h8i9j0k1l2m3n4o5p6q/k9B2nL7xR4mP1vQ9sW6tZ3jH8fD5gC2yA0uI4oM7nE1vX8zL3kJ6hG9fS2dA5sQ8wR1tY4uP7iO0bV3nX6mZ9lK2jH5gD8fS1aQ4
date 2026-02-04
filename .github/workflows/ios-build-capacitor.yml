@@ -658,50 +658,58 @@ jobs:
           echo "✅ Localized app names applied successfully"
       
       - name: Configure Mac Catalyst Entitlements
-        if: inputs.target_platform == 'all_devices' || inputs.target_platform == 'macos_only'
-        working-directory: app/ios/App
-        run: |
-          echo "🔧 Configuring Mac Catalyst App Sandbox..."
-          
-          # 1. Create App.entitlements if it doesn't exist
-          if [ ! -f "App/App.entitlements" ]; then
-            echo "  - Creating App/App.entitlements..."
-            cat <<EOF > App/App.entitlements
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>com.apple.security.app-sandbox</key>
-            <true/>
-          </dict>
-          </plist>
-          EOF
-          else
-            echo "  - App.entitlements exists. Ensuring sandbox is enabled..."
-            /usr/libexec/PlistBuddy -c "Add :com.apple.security.app-sandbox bool true" "App/App.entitlements" 2>/dev/null || /usr/libexec/PlistBuddy -c "Set :com.apple.security.app-sandbox true" "App/App.entitlements"
-          fi
-          
-          # 2. Link Entitlements in Xcode Project using Ruby
-          echo "  - Linking Entitlements in Xcode Project..."
-          cat <<EOF > link_entitlements.rb
-          require 'xcodeproj'
-          project_path = 'App.xcodeproj'
-          project = Xcodeproj::Project.open(project_path)
-          
-          targets = project.targets.select { |t| t.name == 'App' }
-          targets.each do |target|
-            target.build_configurations.each do |config|
-              # Set CODE_SIGN_ENTITLEMENTS to App/App.entitlements
-              config.build_settings['CODE_SIGN_ENTITLEMENTS'] = 'App/App.entitlements'
-              puts "    - Linked entitlements for #{config.name}"
-            end
-          end
-          
-          project.save
-          EOF
-          
-          ruby link_entitlements.rb
-          rm link_entitlements.rb
+            if: inputs.target_platform == 'all_devices' || inputs.target_platform == 'macos_only'
+            working-directory: app/ios/App
+            run: |
+              echo "🔧 Configuring Mac Catalyst App Sandbox..."
+              
+              # 1. Create App.entitlements if it doesn't exist
+              if [ ! -f "App/App.entitlements" ]; then
+                echo "  - Creating App/App.entitlements..."
+                cat <<EOF > App/App.entitlements
+              <?xml version="1.0" encoding="UTF-8"?>
+              <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+              <plist version="1.0">
+              <dict>
+                <key>com.apple.security.app-sandbox</key>
+                <true/>
+                <key>com.apple.security.network.client</key>
+                <true/>
+                <key>com.apple.security.files.user-selected.read-only</key>
+                <true/>
+              </dict>
+              </plist>
+              EOF
+              else
+                echo "  - App.entitlements exists. Ensuring required entitlements..."
+                /usr/libexec/PlistBuddy -c "Add :com.apple.security.app-sandbox bool true" "App/App.entitlements" 2>/dev/null || /usr/libexec/PlistBuddy -c "Set :com.apple.security.app-sandbox true" "App/App.entitlements"
+                /usr/libexec/PlistBuddy -c "Add :com.apple.security.network.client bool true" "App/App.entitlements" 2>/dev/null || /usr/libexec/PlistBuddy -c "Set :com.apple.security.network.client true" "App/App.entitlements"
+                /usr/libexec/PlistBuddy -c "Add :com.apple.security.files.user-selected.read-only bool true" "App/App.entitlements" 2>/dev/null || true
+              fi
+              
+              # 2. Link Entitlements in Xcode Project using Ruby
+              echo "  - Linking Entitlements in Xcode Project..."
+              cat <<EOF > link_entitlements.rb
+              require 'xcodeproj'
+              project_path = 'App.xcodeproj'
+              project = Xcodeproj::Project.open(project_path)
+              
+              targets = project.targets.select { |t| t.name == 'App' }
+              targets.each do |target|
+                target.build_configurations.each do |config|
+                  # Set CODE_SIGN_ENTITLEMENTS to App/App.entitlements
+                  config.build_settings['CODE_SIGN_ENTITLEMENTS'] = 'App/App.entitlements'
+                  puts "    - Linked entitlements for #{config.name}"
+                end
+              end
+              
+              project.save
+              EOF
+              
+              ruby link_entitlements.rb
+              rm link_entitlements.rb
+              
+              echo "✅ Mac Catalyst entitlements configured with network.client and file access"
       
       - name: Configure Target Platform
         working-directory: app/ios/App
