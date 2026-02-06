@@ -110,6 +110,12 @@ jobs:
           
           echo "✅ Apple credentials parsed successfully"
       
+      - name: Configure Git Credentials
+        if: inputs.is_private_repo
+        run: |
+          git config --global url."https://${{ inputs.github_token }}@github.com/".insteadOf "https://github.com/"
+          echo "✅ Git credentials pre-configured for private repo access"
+      
       - name: Clone App Repository
         uses: actions/checkout@v4
         with:
