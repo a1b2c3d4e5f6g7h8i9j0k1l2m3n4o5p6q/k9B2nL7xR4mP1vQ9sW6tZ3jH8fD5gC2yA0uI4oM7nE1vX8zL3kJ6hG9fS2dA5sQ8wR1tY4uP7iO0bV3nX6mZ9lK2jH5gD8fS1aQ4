@@ -311,7 +311,7 @@ jobs:
           if [ "$CAP_MAJOR" -ge 8 ]; then
             IOS_TARGET="15.0"
           elif [ "$CAP_MAJOR" -eq 7 ]; then
-            IOS_TARGET="14.0"
+            IOS_TARGET="15.0"
           elif [ "$CAP_MAJOR" -eq 6 ] || [ "$CAP_MAJOR" -eq 5 ]; then
             IOS_TARGET="13.0"
           else
