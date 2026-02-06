@@ -312,13 +312,13 @@ jobs:
         env:
           CAP_MAJOR: ${{ steps.node_version.outputs.capacitor_major }}
         run: |
-          # Map Capacitor version to minimum iOS deployment target
-          # Capacitor 5: iOS 13.0 | Capacitor 6: iOS 13.0 | Capacitor 7: iOS 14.0 | Capacitor 8+: iOS 15.0
-          if [ "$CAP_MAJOR" -ge 8 ]; then
+          # Use iOS 15.0 for modern Capacitor versions to ensure plugin compatibility
+          # Many popular plugins (AdMob, ML Kit, etc.) require iOS 15.0+
+          # iOS 15+ covers ~99% of active devices, so this is a safe default
+          # Capacitor 5: iOS 13.0 (legacy) | Capacitor 6/7/8+: iOS 15.0
+          if [ "$CAP_MAJOR" -ge 6 ]; then
             IOS_TARGET="15.0"
-          elif [ "$CAP_MAJOR" -eq 7 ]; then
-            IOS_TARGET="15.0"
-          elif [ "$CAP_MAJOR" -eq 6 ] || [ "$CAP_MAJOR" -eq 5 ]; then
+          elif [ "$CAP_MAJOR" -eq 5 ]; then
             IOS_TARGET="13.0"
           else
             IOS_TARGET="15.0"
