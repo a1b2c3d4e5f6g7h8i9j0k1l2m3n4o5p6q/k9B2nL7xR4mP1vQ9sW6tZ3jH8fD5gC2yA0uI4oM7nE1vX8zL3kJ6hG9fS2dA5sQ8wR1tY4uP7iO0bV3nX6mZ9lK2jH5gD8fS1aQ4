@@ -956,8 +956,6 @@ jobs:
               platform:"ios" \
               skip_metadata:true \
               skip_screenshots:true \
-              metadata_path:"$GITHUB_WORKSPACE/app/fastlane/metadata" \
-              screenshots_path:"$GITHUB_WORKSPACE/app/fastlane/screenshots" \
               run_precheck_before_submit:false \
               submit_for_review:false
           fi
@@ -984,8 +982,6 @@ jobs:
                 platform:"osx" \
                 skip_metadata:true \
                 skip_screenshots:true \
-                metadata_path:"$GITHUB_WORKSPACE/app/fastlane/metadata" \
-                screenshots_path:"$GITHUB_WORKSPACE/app/fastlane/screenshots" \
                 run_precheck_before_submit:false \
                 submit_for_review:false
             else
@@ -997,8 +993,6 @@ jobs:
                 platform:"osx" \
                 skip_metadata:true \
                 skip_screenshots:true \
-                metadata_path:"$GITHUB_WORKSPACE/app/fastlane/metadata" \
-                screenshots_path:"$GITHUB_WORKSPACE/app/fastlane/screenshots" \
                 run_precheck_before_submit:false \
                 submit_for_review:false
             fi
